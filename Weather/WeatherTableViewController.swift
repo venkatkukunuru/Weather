@@ -42,8 +42,6 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
         let imageView = UIImageView(image: backgroundImage)
         imageView.contentMode = .center
         tableView.backgroundView = imageView
-
-
         
     }
     
@@ -64,13 +62,9 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
         }
     }
     
+    // MARK: Delegate for CLLocationManager
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         let userLocation:CLLocation = locations[0] as CLLocation
-        
-        // Call stopUpdatingLocation() to stop listening for location updates,
-        // other wise this function will be called every time when user location changes.
-        
-        // manager.stopUpdatingLocation()
         
         print("user latitude = \(userLocation.coordinate.latitude)")
         print("user longitude = \(userLocation.coordinate.longitude)")
@@ -128,37 +122,8 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
         })
     }
     
-
-    // MARK: - Table view data source
+    // MARK: - Table view delegate
     
-    override func numberOfSections(in tableView: UITableView) -> Int {
-        // #warning Incomplete implementation, return the number of sections
-        if self.weatherModel?.hourlyArray.count ?? 0 > 0 && self.weatherModel?.dailyArray.count ?? 0 > 0 {
-            return 3
-        }
-        return 0
-    }
-    
-    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        // #warning Incomplete implementation, return the number of rows
-        if section == 1 {
-            return self.weatherModel?.dailyArray.count ?? 0
-        } else if section == 0{
-            return 2
-        } else {
-            return extendedInfo.count
-        }
-    }
-    
-    /*
-     override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
-     let date = Calendar.current.date(byAdding: .day, value: section, to: Date())
-     let dateFormatter = DateFormatter()
-     dateFormatter.dateFormat = "MMMM dd, yyyy"
-     
-     return dateFormatter.string(from: date!)
-     }
-     */
     override func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
         if section == 1 {
             return 115
@@ -166,6 +131,19 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
             return 80
         }
         return 0
+    }
+    
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
+        if indexPath.section == 0 {
+            if indexPath.row == 0 {
+                return 170
+            }
+            return 25
+        } else if indexPath.section == 1 {
+            return 25
+        }
+        
+        return 50
     }
     
     override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
@@ -179,7 +157,7 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
             myCollectionView.dataSource = self
             myCollectionView.delegate = self
             myCollectionView.register(UINib.init(nibName: "ForecastCell", bundle: nil), forCellWithReuseIdentifier: "ForecastCell")
-
+            
             myCollectionView.backgroundColor = UIColor.clear
             return myCollectionView
         } else if section == 0 {
@@ -201,26 +179,33 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
                     cityName.attributedText = firstString
                 }
             }
-
+            
             cityName.textAlignment = .center
             cityName.backgroundColor = UIColor.clear
             return cityName
         }
         return nil;
-
+        
     }
     
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        if indexPath.section == 0 {
-            if indexPath.row == 0 {
-                return 170
-            }
-            return 25
-        } else if indexPath.section == 1 {
-            return 25
+    // MARK: - Table view data source
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        // #warning Incomplete implementation, return the number of sections
+        if self.weatherModel?.hourlyArray.count ?? 0 > 0 && self.weatherModel?.dailyArray.count ?? 0 > 0 {
+            return 3
         }
-        
-        return 50
+        return 0
+    }
+    
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        // #warning Incomplete implementation, return the number of rows
+        if section == 1 {
+            return self.weatherModel?.dailyArray.count ?? 0
+        } else if section == 0{
+            return 2
+        } else {
+            return extendedInfo.count
+        }
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -283,22 +268,31 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
 
         } else {
             
-            
             let extendedInfoCell = tableView.dequeueReusableCell(withIdentifier: "ExtendedInfoCell", for: indexPath)
-
             let infoString = self.weatherExtendedInfoViewModel?.setupString(key: extendedInfo[indexPath.row])
-
             extendedInfoCell.textLabel?.text = extendedInfo[indexPath.row].stringValue
             extendedInfoCell.detailTextLabel?.text = infoString
-
             return extendedInfoCell
-            
+
         }
-        
 
     }
     
+    // MARK: - Collection view data source
     
+    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
+        return self.weatherModel?.hourlyArray.count ?? 0
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
+        return CGFloat(15)
+    }
+    
+    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
+        return CGFloat(15)
+    }
+
+    // MARK: - Collection view delegate
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let myCell = collectionView.dequeueReusableCell(withReuseIdentifier: "ForecastCell", for: indexPath) as! ForecastCell
         
@@ -314,21 +308,4 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
         return myCell
     }
     
-    func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return self.weatherModel?.hourlyArray.count ?? 0
-    }
-
-    
-    func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        print("User tapped on item \(indexPath.row)")
-    }
-
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumInteritemSpacingForSectionAt section: Int) -> CGFloat {
-        return CGFloat(15)
-    }
-    
-    func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
-        return CGFloat(15)
-    }
-
 }

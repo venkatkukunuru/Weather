@@ -8,16 +8,15 @@
 
 import UIKit
 import CoreLocation
+import SwiftyJSON
 
 class WeatherTableViewController: UITableViewController, UICollectionViewDataSource, UICollectionViewDelegate, CLLocationManagerDelegate {
     
     
     var locationManager:CLLocationManager!
-
-    var hourlyData = [Weather]()
-    var dailyData = [Weather]()
-    var city: String = ""
-
+    var weatherModel : WeatherModel?
+    let extendedInfo: [ExtendedInfo] = [.sunrise, .sunset, .humidity, .wind, .feelLike, .dewPoint, .pressure, .visibility, .uvIndex]
+    var weatherExtendedInfoViewModel: WeatherExtendedInfoViewModel?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -50,7 +49,6 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        
         determineMyCurrentLocation()
     }
 
@@ -112,24 +110,17 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
     }
     
     func callAPI(location:CLLocation, city: String) {
-        print(city)
 
-        Weather.forecast(withLocation: location.coordinate, city: city, completion: { (hourly:[Weather]?, daily:[Weather]?, city:String?) in
+        Weather.forecast(withLocation: location.coordinate, city: city, completion: { (weatModel:WeatherModel?) in
             
-            self.city = city ?? ""
-            
-            if let weatherData = hourly {
-                self.hourlyData = weatherData
+            if let weatherModel = weatModel {
+                self.weatherModel = weatherModel
                 
                 DispatchQueue.main.async {
-                    self.tableView.reloadData()
-                }
-            }
-            
-            if let weatherData = daily {
-                self.dailyData = weatherData
-                
-                DispatchQueue.main.async {
+                    guard let weatherExtendedInfo = self.weatherModel?.extendedInfo else { return }
+
+                    self.weatherExtendedInfoViewModel = WeatherExtendedInfoViewModel(weatherExtendedInfo: weatherExtendedInfo)
+                    
                     self.tableView.reloadData()
                 }
             }
@@ -142,8 +133,8 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
     
     override func numberOfSections(in tableView: UITableView) -> Int {
         // #warning Incomplete implementation, return the number of sections
-        if hourlyData.count > 0 && dailyData.count > 0 {
-            return 2
+        if self.weatherModel?.hourlyArray.count ?? 0 > 0 && self.weatherModel?.dailyArray.count ?? 0 > 0 {
+            return 3
         }
         return 0
     }
@@ -151,11 +142,12 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         // #warning Incomplete implementation, return the number of rows
         if section == 1 {
-            return dailyData.count - 1
+            return self.weatherModel?.dailyArray.count ?? 0
         } else if section == 0{
             return 2
+        } else {
+            return extendedInfo.count
         }
-        return 0
     }
     
     /*
@@ -191,7 +183,6 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
             myCollectionView.backgroundColor = UIColor.clear
             return myCollectionView
         } else if section == 0 {
-            let weatherObject = hourlyData[section]
             
             let cityName = UILabel()
             cityName.text = "city"
@@ -200,13 +191,17 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
             
             let firstAttributes: [NSAttributedString.Key: Any] = [.foregroundColor: UIColor.white, NSAttributedString.Key.font: UIFont.systemFont(ofSize: 30)]
             let secondAttributes = [NSAttributedString.Key.foregroundColor: UIColor.white, NSAttributedString.Key.font: UIFont.systemFont(ofSize: 20)]
+            
+            let firstString: NSMutableAttributedString
+            if let city = self.weatherModel?.overview.city {
+                firstString = NSMutableAttributedString(string: city + " \n", attributes: firstAttributes)
+                if let description = self.weatherModel?.overview.shortDescription {
+                    let secondString = NSAttributedString(string: description, attributes: secondAttributes)
+                    firstString.append(secondString)
+                    cityName.attributedText = firstString
+                }
+            }
 
-            let firstString = NSMutableAttributedString(string: self.city + " \n", attributes: firstAttributes)
-            let secondString = NSAttributedString(string: weatherObject.summary, attributes: secondAttributes)
-
-            firstString.append(secondString)
-
-            cityName.attributedText = firstString
             cityName.textAlignment = .center
             cityName.backgroundColor = UIColor.clear
             return cityName
@@ -221,9 +216,11 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
                 return 170
             }
             return 25
+        } else if indexPath.section == 1 {
+            return 25
         }
         
-        return 25
+        return 50
     }
     
     override func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
@@ -231,112 +228,94 @@ class WeatherTableViewController: UITableViewController, UICollectionViewDataSou
         if indexPath.section == 0 {
 
             if indexPath.row == 0 {
-                let weatherObject = hourlyData[indexPath.section]
 
                 let cell = tableView.dequeueReusableCell(withIdentifier: "TempCell", for: indexPath)
                     as! TempCell
-                cell.tempLabel?.text = "\(Int(weatherObject.temperature))°"
+                
+                if let temperature = self.weatherModel?.overview.currentTemperature {
+                    cell.tempLabel?.text = "\(String(describing: temperature))°"
+                }
                 
                 return cell
                 
             } else {
-                let weatherObject = dailyData[indexPath.section]
+                let weatherObject = self.weatherModel?.overview
 
                 let todayCell = tableView.dequeueReusableCell(withIdentifier: "TodayCell", for: indexPath)
                     as! TodayCell
 
-                let date = Date(timeIntervalSince1970: weatherObject.time)
-                let dateFormatter = DateFormatter()
-                dateFormatter.dateFormat = "EEEE"
 
                 todayCell.todayLabel?.text = "Today"
-                todayCell.weekdayLabel?.text = dateFormatter.string(from: date)
+                todayCell.weekdayLabel?.text = weatherObject?.weekDay
                 
-                todayCell.tempHighLabel?.text = "\(Int(weatherObject.tempMax))"
-                todayCell.tempLowLabel?.text = "\(Int(weatherObject.tempMin))"
+                if let temperatureHigh = weatherObject?.temperatureHigh {
+                    todayCell.tempHighLabel?.text = "\(String(describing: temperatureHigh))°"
+                }
+                
+                if let temperatureLow = weatherObject?.temperatureLow {
+                    todayCell.tempLowLabel?.text = "\(String(describing: temperatureLow))°"
+                }
                 
                 return todayCell
 
             }
             
-        } else {
-            let weatherObject = dailyData[indexPath.row + 1]
+        } else if indexPath.section == 1 {
+            let weatherObject = self.weatherModel?.dailyArray[indexPath.row]
             
             let todayCell = tableView.dequeueReusableCell(withIdentifier: "TodayCell", for: indexPath)
                 as! TodayCell
             
-            let date = Date(timeIntervalSince1970: weatherObject.time)
-            let dateFormatter = DateFormatter()
-            dateFormatter.dateFormat = "EEEE"
-            
             todayCell.todayLabel?.text = ""
-            todayCell.weekdayLabel?.text = dateFormatter.string(from: date)
+            todayCell.weekdayLabel?.text = weatherObject?.day
             
-            todayCell.tempHighLabel?.text = "\(Int(weatherObject.tempMax))"
-            todayCell.tempLowLabel?.text = "\(Int(weatherObject.tempMin))"
+            if let temperatureHigh = weatherObject?.temperatureHigh {
+                todayCell.tempHighLabel?.text = "\(String(describing: temperatureHigh))°"
+            }
             
-            todayCell.iconImage?.image = UIImage(named: weatherObject.icon)
+            if let temperatureLow = weatherObject?.temperatureLow {
+                todayCell.tempLowLabel?.text = "\(String(describing: temperatureLow))°"
+            }
+
+            todayCell.iconImage?.image = weatherObject?.description
 
             return todayCell
 
+        } else {
+            
+            
+            let extendedInfoCell = tableView.dequeueReusableCell(withIdentifier: "ExtendedInfoCell", for: indexPath)
+
+            let infoString = self.weatherExtendedInfoViewModel?.setupString(key: extendedInfo[indexPath.row])
+
+            extendedInfoCell.textLabel?.text = extendedInfo[indexPath.row].stringValue
+            extendedInfoCell.detailTextLabel?.text = infoString
+
+            return extendedInfoCell
+            
         }
         
 
     }
     
     
-    /*
-     // Override to support conditional editing of the table view.
-     override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
-     // Return false if you do not want the specified item to be editable.
-     return true
-     }
-     */
-    
-    /*
-     // Override to support editing the table view.
-     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCellEditingStyle, forRowAt indexPath: IndexPath) {
-     if editingStyle == .delete {
-     // Delete the row from the data source
-     tableView.deleteRows(at: [indexPath], with: .fade)
-     } else if editingStyle == .insert {
-     // Create a new instance of the appropriate class, insert it into the array, and add a new row to the table view
-     }
-     }
-     */
-    
-    /*
-     // Override to support rearranging the table view.
-     override func tableView(_ tableView: UITableView, moveRowAt fromIndexPath: IndexPath, to: IndexPath) {
-     
-     }
-     */
-    
-    /*
-     // Override to support conditional rearranging of the table view.
-     override func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
-     // Return false if you do not want the item to be re-orderable.
-     return true
-     }
-     */
-    
-    
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let myCell = collectionView.dequeueReusableCell(withReuseIdentifier: "ForecastCell", for: indexPath) as! ForecastCell
         
-        let weatherObject = hourlyData[indexPath.row]
+        let weatherObject = self.weatherModel?.hourlyArray[indexPath.row]
 
-        let date = Date(timeIntervalSince1970: weatherObject.time)
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "H a"
-        myCell.timeLabel?.text = dateFormatter.string(from: date)
-        myCell.iconImage?.image = UIImage(named: weatherObject.icon)
-        myCell.temperatureLabel?.text = "\(Int(weatherObject.temperature))°F"
+        myCell.timeLabel?.text = weatherObject?.hour
+        myCell.iconImage?.image = weatherObject?.description
+        myCell.temperatureLabel?.text = "\(String(describing: weatherObject?.temperature))°F"
+        if let temperature = weatherObject?.temperature {
+            myCell.temperatureLabel?.text = "\(String(describing: temperature))°"
+        }
+
         return myCell
     }
     
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return hourlyData.count
+        return self.weatherModel?.hourlyArray.count ?? 0
     }
 
     

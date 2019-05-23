@@ -31,4 +31,20 @@ class WeatherTests: XCTestCase {
         }
     }
 
+    func testExtendedInfoTitleStrings() {
+        
+        let feelLikeInfo = ExtendedInfo.feelLike.stringValue
+        XCTAssertEqual(feelLikeInfo, "FEEL LIKE :  ")
+        
+        let chanceOfRainInfo = ExtendedInfo.dewPoint.stringValue
+        XCTAssertEqual(chanceOfRainInfo, "DEW POINT :  ")
+        
+        let uvIndexInfo = ExtendedInfo.uvIndex.stringValue
+        XCTAssertEqual(uvIndexInfo, "UV INDEX :  ")
+        
+        let windIndexInfo = ExtendedInfo.wind.stringValue
+        XCTAssertEqual(windIndexInfo, ExtendedInfo.wind.rawValue.uppercased() + " :  ")
+    }
+    
+
 }
